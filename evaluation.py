@@ -1,0 +1,193 @@
+import numpy as np
+import pandas as pd
+from collections import deque
+from wrapper import DummyModel
+from datetime import timedelta
+from sklearn.model_selection import TimeSeriesSplit
+from sklearn.metrics import precision_score, recall_score, classification_report
+
+def simulate_strategy_corrected(X_test, y_test, model, threshold=0.5, starting_capital=1000, nb_contracts=1):
+    df = X_test.copy()
+    df['datetime'] = pd.to_datetime(df['datetime'])
+    df[['target', 'percent_increase', 'hours_to_max']] = y_test[['target', 'percent_increase', 'hours_to_max']].values
+
+    df = df.sort_values('datetime')
+
+    # Predict all
+    y_pred_proba = model.predict(df.drop(columns=['datetime', 'expire_date', 'target', 'percent_increase', 'hours_to_max']))
+
+    # Mask invalid test points
+    invalid_mask = (df['time_to_expiry'] >= 1500) | (df['strike'] >= 1.11 * df['open_t0'])
+    y_pred_proba[invalid_mask.values] = 0.0
+
+    df['pred_proba'] = y_pred_proba
+    df['prediction'] = (y_pred_proba >= threshold).astype(int)
+
+    capital = starting_capital
+    capital_history = []
+    trade_log = []
+    invested_contracts = set()
+    pending_returns = deque()
+
+    for current_time, sub_df in df.groupby('datetime'):
+        # Release matured trades
+        while pending_returns and pending_returns[0][0] <= current_time:
+            _, cap_delta = pending_returns.popleft()
+            capital += cap_delta
+
+        capital_history.append((current_time, capital))
+
+        # Top 3 predictions at this timestamp
+        candidates = sub_df[sub_df['prediction'] == 1]
+        candidates = candidates.sort_values('pred_proba', ascending=False).head(3)
+
+        for _, row in candidates.iterrows():
+            option_id = (row['strike'], row['expire_date'])
+
+            if option_id in invested_contracts:
+                continue
+
+            option_price = row["ask_t0"] * 100 * nb_contracts
+            if capital < option_price:
+                continue
+
+            invested_contracts.add(option_id)
+            capital -= option_price
+
+            if row['target'] == 1:
+                gain = min(row['percent_increase'], 2.0)  # NEW CAP
+                capital_return = option_price * (1 + gain)
+                result = 'win'
+            else:
+                capital_return = 0
+                result = 'loss'
+
+            release_time = row['datetime'] + timedelta(hours=row['hours_to_max'])
+            pending_returns.append((release_time, capital_return))
+
+            trade_log.append({
+                'datetime': row['datetime'],
+                'release_time': release_time,
+                'strike': row['strike'],
+                'expire_date': row['expire_date'],
+                'result': result,
+                'locked_capital': option_price,
+                'expected_return': capital_return,
+                'capital_available_after': release_time,
+                'percent_increase': row['percent_increase'],
+                'hours_to_max': row['hours_to_max']
+            })
+
+    # Final cleanup of pending returns
+    last_time = df['datetime'].max()
+    while pending_returns:
+        release_time, cap_delta = pending_returns.popleft()
+        if release_time > last_time:
+            capital_history.append((release_time, capital + cap_delta))
+        capital += cap_delta
+
+    capital_history = pd.DataFrame(capital_history, columns=['datetime', 'capital'])
+    trade_log_df = pd.DataFrame(trade_log)
+
+    return capital, capital_history, trade_log_df, df
+
+
+def evaluate_month_with_existing_models(X_month, y_month, models, n_splits=5, threshold=0.8, starting_capital=1000, nb_contracts=2):
+    if n_splits == 2:
+        tscv = TimeSeriesSplit(n_splits=n_splits, test_size=int(len(X_month) * 0.3))
+    else:
+        tscv = TimeSeriesSplit(n_splits=n_splits)
+
+    fold_metrics = []
+    fold_capitals = []
+    all_trades = []
+
+    for fold_idx, (train_idx, test_idx) in enumerate(tscv.split(X_month)):
+        print(f"\n🔵 Month fold {fold_idx+1}/{n_splits}")
+
+        X_train, X_test = X_month.iloc[train_idx].copy(), X_month.iloc[test_idx].copy()
+        y_train, y_test = y_month.iloc[train_idx].copy(), y_month.iloc[test_idx].copy()
+
+        # Find last training datetime
+        last_train_datetime = X_train['datetime'].max()
+
+        # Check if there are any label=1 in training set
+        label1_train = y_train[y_train['target'] == 1]
+
+        if not label1_train.empty:
+            # Find the latest datetime among label 1
+            latest_label1_idx = X_train.loc[label1_train.index]['datetime'].idxmax()
+            latest_label1_datetime = X_train.loc[latest_label1_idx, 'datetime']
+            latest_label1_hours_to_max = y_train.loc[latest_label1_idx, 'hours_to_max']
+
+            # Required gap: from latest label 1 trade
+            required_gap_datetime = latest_label1_datetime + pd.Timedelta(hours=latest_label1_hours_to_max + 4)  # 4h = 16 timesteps
+        else:
+            # No label 1 trades: fallback to last training point (maybe + 1 week) + 4h
+            required_gap_datetime = last_train_datetime + pd.Timedelta(hours=4)
+
+        # Now compare natural gap
+        first_test_datetime = X_test['datetime'].min()
+
+        if first_test_datetime < required_gap_datetime:
+            # Need to filter test set
+            X_test = X_test[X_test['datetime'] > required_gap_datetime]
+            y_test = y_test.loc[X_test.index]
+
+            if len(X_test) == 0:
+                print(f"⚠️ Fold {fold_idx} skipped: no test data after required gap.")
+                continue
+
+        # Predict with each January model
+        preds_per_model = []
+        for model in models:
+            pred_proba = model.predict(X_test.drop(columns=['datetime', 'expire_date'], errors='ignore'))
+
+            # Mask invalid predictions
+            invalid_mask = (X_test['time_to_expiry'] >= 1500) | (X_test['strike'] >= 1.11 * X_test['open_t0'])
+            pred_proba[invalid_mask.values] = 0.0
+
+            preds_per_model.append(pred_proba)
+
+        preds_per_model = np.vstack(preds_per_model)  # shape: (n_models, n_samples)
+        avg_preds = preds_per_model.mean(axis=0)  # average across models
+
+        # Binarize predictions
+        y_pred = (avg_preds >= threshold).astype(int)
+
+        # Metrics
+        precision = precision_score(y_test['target'], y_pred, pos_label=1, zero_division=0)
+        recall = recall_score(y_test['target'], y_pred, pos_label=1, zero_division=0)
+
+        # print(classification_report(y_test['target'], y_pred, digits=3))
+
+        # Strategy simulation
+        X_test_copy = X_test.copy()
+        X_test_copy['datetime'] = pd.to_datetime(X_test_copy['datetime'])
+        y_test_copy = y_test.copy()
+
+        final_capital, capital_history, trade_log, _ = simulate_strategy_corrected(
+            X_test_copy,
+            y_test_copy,
+            DummyModel(avg_preds),
+            threshold=threshold,
+            starting_capital=starting_capital,
+            nb_contracts=nb_contracts,
+        )
+
+        print(f"💵 Final Capital for fold {fold_idx}: ${final_capital:.2f}")
+
+        fold_metrics.append({
+            'classification_report': classification_report(y_test['target'], y_pred, digits=3),
+            'precision': precision,
+            'recall': recall,
+            'final_capital': final_capital,
+        })
+        fold_capitals.append(capital_history)
+        trade_log['fold'] = fold_idx
+        all_trades.append(trade_log)
+    if len(all_trades):
+        trades_df = pd.concat(all_trades, ignore_index=True)
+    else:
+        trades_df = pd.DataFrame()
+    return fold_metrics, fold_capitals, trades_df
