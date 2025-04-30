@@ -118,6 +118,6 @@ OPTIONS_CHAIN_ABS_PATH_MAP = {
     "12": BASE_EXTERNAL_PATH + "spy_options_15mins/spy_15x_2023q4/spy_15x_202312.txt",
 }
 MODELS_FOLDER_NAME = BASE_PATH + "models_january"
-MODELS_FILENAME_BASE = "model_fold"
-EXPERIMENT_FIXED_RESULTS_PATH = BASE_PATH + "experiments_fixed_training.pkl"
-EXPERIMENT_MOVING_RESULTS_PATH = BASE_PATH + "experiments_moving_training.pkl"
+MODELS_FILENAME_BASE = "model_fold_{today}_"
+EXPERIMENT_FIXED_RESULTS_PATH = BASE_PATH + "experiments_fixed_training_{today}.pkl"
+EXPERIMENT_MOVING_RESULTS_PATH = BASE_PATH + "experiments_moving_training_{today}.pkl"

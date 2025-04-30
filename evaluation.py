@@ -93,6 +93,10 @@ def simulate_strategy_corrected(X_test, y_test, model, threshold=0.5, starting_c
 
 
 def evaluate_month_with_existing_models(X_month, y_month, models, n_splits=5, threshold=0.8, starting_capital=1000, nb_contracts=2):
+    
+    X_month = X_month.sort_values("datetime")
+    y_month = y_month.loc[X_month.index]
+
     if n_splits == 2:
         tscv = TimeSeriesSplit(n_splits=n_splits, test_size=int(len(X_month) * 0.3))
     else:
@@ -121,7 +125,10 @@ def evaluate_month_with_existing_models(X_month, y_month, models, n_splits=5, th
             latest_label1_hours_to_max = y_train.loc[latest_label1_idx, 'hours_to_max']
 
             # Required gap: from latest label 1 trade
-            required_gap_datetime = latest_label1_datetime + pd.Timedelta(hours=latest_label1_hours_to_max + 4)  # 4h = 16 timesteps
+            required_gap_datetime = max(
+                latest_label1_datetime + pd.Timedelta(hours=latest_label1_hours_to_max + 4),
+                last_train_datetime + pd.Timedelta(hours=latest_label1_hours_to_max + 4),
+            )
         else:
             # No label 1 trades: fallback to last training point (maybe + 1 week) + 4h
             required_gap_datetime = last_train_datetime + pd.Timedelta(hours=4)

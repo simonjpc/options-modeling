@@ -1,4 +1,5 @@
 import gc
+from datetime import datetime
 import pandas as pd
 from evaluation import evaluate_month_with_existing_models
 from preprocessing import (
@@ -19,7 +20,7 @@ from constants import (
 from training import time_series_cv
 from load_and_save import load_models, save_model, save_experiment_results
 
-models = load_models(MODELS_FOLDER_NAME)
+models = []#load_models(MODELS_FOLDER_NAME)
 results = {}
 
 if len(models) == 0:
@@ -45,8 +46,9 @@ if len(models) == 0:
     gc.collect()
 
     # save models (MISSING)
+    now = datetime.now().strftime("%Y%m%d%H%M%S")
     for idx, model in enumerate(models):
-        save_model(MODELS_FOLDER_NAME, MODELS_FILENAME_BASE + str(idx), model)
+        save_model(MODELS_FOLDER_NAME, MODELS_FILENAME_BASE.format(today=now) + str(idx), model)
     print("base models saved.")
 else:
     all_months = ["01"] + MONTHS_NUMBERS
@@ -108,7 +110,8 @@ for month in all_months:
     print(f"month {month} processed.")
 
     # save results (save on each iteration to have information before full run)
-    save_experiment_results(results, EXPERIMENT_FIXED_RESULTS_PATH)
+    now = datetime.now().strftime("%Y%m%d%H%M%S")
+    save_experiment_results(results, EXPERIMENT_FIXED_RESULTS_PATH.format(today=now))
     print("tmp results saved. \n")
 
     del df_labeled, X_month, y_month
