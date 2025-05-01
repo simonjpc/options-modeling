@@ -1,20 +1,20 @@
 import gc
-from datetime import datetime
+import numpy as np
 import pandas as pd
-from evaluation import evaluate_month_with_existing_models
+from datetime import datetime
 from preprocessing import (
     prepare_labels,
-    create_option_dataset_full,
     add_datetime_features,
     add_advanced_features,
+    create_option_dataset_full,
 )
 from constants import (
     MONTHS_NUMBERS,
-    EXPERIMENT_MOVING_RESULTS_PATH,
+    EXPERIMENT_MOVING_COMPOUND_RESULTS_PATH,
     OPTIONS_CHAIN_ABS_PATH_MAP,
     STOCK_PRICE_ABS_PATH,
 )
-from training import time_series_cv
+from training import time_series_cv, time_series_real_eval
 from load_and_save import save_experiment_results
 
 results = {}
@@ -22,6 +22,9 @@ results = {}
 all_months = ["01"] + MONTHS_NUMBERS
 stock_price_data = pd.read_csv(STOCK_PRICE_ABS_PATH)
 print("base models loaded.")
+
+intial_capital = 1000
+current_capital = intial_capital
 
 for month in all_months:
     print(f"\n🗓 Processing month {month}")
@@ -40,26 +43,38 @@ for month in all_months:
     print(f"dataset completed for month {month}")
 
     # print(f"💵 Final Capital for {month}: ${final_capital:.2f}")
-    fold_metrics, fold_capitals, trades_df, _, _ = time_series_cv(
+    # fold_metrics, fold_capitals, trades_df, _, _ = time_series_cv(
+    #     X_month,
+    #     y_month,
+    #     n_splits=5,
+    #     threshold=0.8,
+    #     starting_capital=current_capital,
+    #     nb_contracts=2,
+    # )
+    fold_metrics, fold_capitals, trades_df, _, _ = time_series_real_eval(
         X_month,
         y_month,
-        n_splits=5,
+        # n_splits=5,
         threshold=0.8,
-        starting_capital=1000,
+        starting_capital=current_capital,
         nb_contracts=2,
     )
+    if fold_metrics is not None:
+        print(fold_metrics)
+        if not np.isnan(fold_metrics).item():
+            current_capital = np.mean(fold_metrics).item()
 
     results[month] = {
         "fold_metrics": fold_metrics,
         "fold_capitals": fold_capitals,
         "trades_df": trades_df,
     }
-
+    print(f"current capital: {current_capital}")
     print(f"month {month} processed.")
 
     # save results (save on each iteration to have information before full run)
     now = datetime.now().strftime("%Y%m%d%H%M%S")
-    save_experiment_results(results, EXPERIMENT_MOVING_RESULTS_PATH.format(today=now))
+    save_experiment_results(results, EXPERIMENT_MOVING_COMPOUND_RESULTS_PATH.format(today=now))
     print("tmp results saved. \n")
 
     del df_labeled, X_month, y_month

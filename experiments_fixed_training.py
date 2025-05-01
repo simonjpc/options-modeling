@@ -48,6 +48,8 @@ if len(models) == 0:
     # save models (MISSING)
     now = datetime.now().strftime("%Y%m%d%H%M%S")
     for idx, model in enumerate(models):
+        if isinstance(model, tuple):
+            model, best_thr = model
         save_model(MODELS_FOLDER_NAME, MODELS_FILENAME_BASE.format(today=now) + str(idx), model)
     print("base models saved.")
 else:
@@ -71,26 +73,6 @@ for month in all_months:
     X_month = add_advanced_features(X_month, n=16)
     print(f"dataset completed for month {month}")
 
-    # # 3. Predict with ensemble
-    # avg_preds = predict_with_ensemble(models, X_month)
-
-    # # 4. Metrics
-    # threshold = 0.8
-    # y_pred = (avg_preds >= threshold).astype(int)
-
-    # # 5. Simulate strategy
-    # X_month_copy = X_month.copy()
-    # X_month_copy['datetime'] = pd.to_datetime(X_month_copy['datetime'])
-    # y_month_copy = y_month.copy()
-    # final_capital, capital_history, trade_log, _ = simulate_strategy_corrected(
-    #     X_month_copy,
-    #     y_month_copy,
-    #     DummyModel(avg_preds),
-    #     threshold=threshold,
-    #     starting_capital=1000,
-    #     nb_contracts=2,
-    # )
-    # print(f"💵 Final Capital for {month}: ${final_capital:.2f}")
     fold_metrics, fold_capitals, trades_df = evaluate_month_with_existing_models(
         X_month,
         y_month,

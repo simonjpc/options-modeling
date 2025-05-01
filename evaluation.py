@@ -17,7 +17,8 @@ def simulate_strategy_corrected(X_test, y_test, model, threshold=0.5, starting_c
     y_pred_proba = model.predict(df.drop(columns=['datetime', 'expire_date', 'target', 'percent_increase', 'hours_to_max']))
 
     # Mask invalid test points
-    invalid_mask = (df['time_to_expiry'] >= 1500) | (df['strike'] >= 1.11 * df['open_t0'])
+    # invalid_mask = (df['time_to_expiry'] >= 1500) | (df['strike'] >= 1.11 * df['open_t0'])
+    invalid_mask = (df['time_to_expiry'] >= 1500) | (df['moneyness'] >= 1.11)
     y_pred_proba[invalid_mask.values] = 0.0
 
     df['pred_proba'] = y_pred_proba
@@ -105,6 +106,7 @@ def evaluate_month_with_existing_models(X_month, y_month, models, n_splits=5, th
     fold_metrics = []
     fold_capitals = []
     all_trades = []
+    all_capitals = []
 
     for fold_idx, (train_idx, test_idx) in enumerate(tscv.split(X_month)):
         print(f"\n🔵 Month fold {fold_idx+1}/{n_splits}")
@@ -148,10 +150,16 @@ def evaluate_month_with_existing_models(X_month, y_month, models, n_splits=5, th
         # Predict with each January model
         preds_per_model = []
         for model in models:
+            if isinstance(model, tuple):
+                model, best_threshold = model
+            else:
+                print(f"No best threshold found... Using default value {threshold}")
+                best_threshold = threshold
             pred_proba = model.predict(X_test.drop(columns=['datetime', 'expire_date'], errors='ignore'))
 
             # Mask invalid predictions
-            invalid_mask = (X_test['time_to_expiry'] >= 1500) | (X_test['strike'] >= 1.11 * X_test['open_t0'])
+            # invalid_mask = (X_test['time_to_expiry'] >= 1500) | (X_test['strike'] >= 1.11 * X_test['open_t0'])
+            invalid_mask = (X_test['time_to_expiry'] >= 1500) | (X_test['moneyness'] >= 1.11)
             pred_proba[invalid_mask.values] = 0.0
 
             preds_per_model.append(pred_proba)
@@ -160,7 +168,7 @@ def evaluate_month_with_existing_models(X_month, y_month, models, n_splits=5, th
         avg_preds = preds_per_model.mean(axis=0)  # average across models
 
         # Binarize predictions
-        y_pred = (avg_preds >= threshold).astype(int)
+        y_pred = (avg_preds >= best_threshold).astype(int)
 
         # Metrics
         precision = precision_score(y_test['target'], y_pred, pos_label=1, zero_division=0)
@@ -177,7 +185,7 @@ def evaluate_month_with_existing_models(X_month, y_month, models, n_splits=5, th
             X_test_copy,
             y_test_copy,
             DummyModel(avg_preds),
-            threshold=threshold,
+            threshold=best_threshold,
             starting_capital=starting_capital,
             nb_contracts=nb_contracts,
         )
@@ -193,6 +201,15 @@ def evaluate_month_with_existing_models(X_month, y_month, models, n_splits=5, th
         fold_capitals.append(capital_history)
         trade_log['fold'] = fold_idx
         all_trades.append(trade_log)
+
+        all_capitals.append(final_capital)
+
+    avg_final_capital = np.mean(all_capitals)
+    
+    print("\n====================")
+    print(f"Average Final Capital: ${avg_final_capital:.2f}")
+    print("====================")
+
     if len(all_trades):
         trades_df = pd.concat(all_trades, ignore_index=True)
     else:
