@@ -138,9 +138,16 @@ def create_option_dataset_full(df, n=6, label_column='label'):
         other_features_windows = ts_windows[:, selected_idx, 1:]  # exclude 'open'
 
         open_flat = open_windows  # no reshape
+
+        # Compute open_change_tN = (open_t-(N-1) - open_t-N) / open_t-N
+        open_change = (open_flat[:, :-1] - open_flat[:, 1:]) / open_flat[:, 1:]
+        # Rename columns: open_change_t0 corresponds to change from t0 to t-1
+        open_change_flat = open_change  # shape (num_windows, 15)
+
         other_flat = other_features_windows.reshape(num_windows, -1)
 
-        ts_flat = np.concatenate([open_flat, other_flat], axis=1)
+        # ts_flat = np.concatenate([open_flat, other_flat], axis=1)
+        ts_flat = np.concatenate([open_flat, open_change_flat, other_flat], axis=1)
 
         static_final = static[idx[:, 0]]
         labels_final = labels[idx[:, 0]]
@@ -156,17 +163,23 @@ def create_option_dataset_full(df, n=6, label_column='label'):
     y_final = np.vstack(y_rows)
 
     # Build column names
-    open_col_names = [f'open_t{-i}' for i in range(0, 16)]  # open_t0 to open_t-15
+    # open_col_names = [f'open_t{-i}' for i in range(0, 16)]  # open_t0 to open_t-15
+    # feature_times = ['t0', 't-1', 't-2', 't-3', 't-4', 't-5', 't-10', 't-15']
+    # other_col_names = [f'{col}_{t}' for t in feature_times for col in time_series_cols[1:]]
+    open_col_names = [f'open_t{-i}' for i in range(0, 16)]
+    open_change_col_names = [f'open_change_t{-i}' for i in range(0, 15)]
     feature_times = ['t0', 't-1', 't-2', 't-3', 't-4', 't-5', 't-10', 't-15']
     other_col_names = [f'{col}_{t}' for t in feature_times for col in time_series_cols[1:]]
 
-    col_names = ['datetime', 'strike', 'expire_date', 'time_to_expiry'] + open_col_names + other_col_names
+    # col_names = ['datetime', 'strike', 'expire_date', 'time_to_expiry'] + open_col_names + other_col_names
+    col_names = ['datetime', 'strike', 'expire_date', 'time_to_expiry'] + open_col_names + open_change_col_names + other_col_names
+
     X = pd.DataFrame(X_final, columns=col_names)
     X['datetime'] = pd.to_datetime(X['datetime'])
-    
+
     float_cols = [col for col in col_names if ("datetime" not in col) and ("expire_date" not in col)]
     X[float_cols] = X[float_cols].astype(np.float32)
-    
+
     y = pd.DataFrame(y_final, columns=["target", "percent_increase", "hours_to_max"])
 
     return X, y
@@ -177,57 +190,10 @@ def add_datetime_features(X):
         'hour': X['datetime'].dt.hour,
         'minute': X['datetime'].dt.minute,
         'day_of_week': X['datetime'].dt.dayofweek,
-        'month': X['datetime'].dt.month,
     }, index=X.index)
-
     X = pd.concat([X, datetime_features], axis=1)
     X['day_of_week'] = X['day_of_week'].astype("category")
-    X['month'] = X['month'].astype("category")
     return X
-
-# @njit(fastmath=True)
-# def compute_slopes(data, x, x_mean, x_var):
-#     n_samples, n_steps = data.shape
-#     slopes = np.empty(n_samples, dtype=np.float32)
-
-#     x = x.astype(np.float32)
-#     x_mean = np.float32(x_mean)
-#     x_var = np.float32(x_var)
-
-#     for i in range(n_samples):
-#         y = data[i]
-#         y_mean = np.float32(np.mean(y))
-#         diff_x = x - x_mean
-#         diff_y = y - y_mean
-#         slopes[i] = np.dot(diff_x, diff_y) / (n_steps * x_var)
-
-#     return slopes
-
-# @njit(fastmath=True)
-# def compute_derived_features(open_data, iv_data, strike):
-#     open_t0, open_start, open_half, open_end = open_data.T
-#     iv_t0, iv_start, iv_half, iv_end = iv_data.T
-
-#     n_samples = strike.shape[0]
-#     out = np.empty((10, n_samples), dtype=np.float32)
-
-#     for i in range(n_samples):
-#         s = strike[i] if strike[i] != 0 else 1
-#         out[0, i] = open_t0[i] / s
-
-#         out[1, i] = iv_t0[i] - iv_start[i]
-#         out[2, i] = iv_t0[i] / iv_start[i] if iv_start[i] != 0 else 0
-#         out[3, i] = (open_t0[i] - open_start[i]) / open_start[i] if open_start[i] != 0 else 0
-
-#         out[4, i] = iv_t0[i] - iv_half[i]
-#         out[5, i] = iv_t0[i] / iv_half[i] if iv_half[i] != 0 else 0
-#         out[6, i] = (open_t0[i] - open_half[i]) / open_half[i] if open_half[i] != 0 else 0
-
-#         out[7, i] = iv_t0[i] - iv_end[i]
-#         out[8, i] = iv_t0[i] / iv_end[i] if iv_end[i] != 0 else 0
-#         out[9, i] = (open_t0[i] - open_end[i]) / open_end[i] if open_end[i] != 0 else 0
-
-#     return out
 
 def add_advanced_features(X: pd.DataFrame, n=6):
     X = X.copy()
@@ -257,5 +223,9 @@ def add_advanced_features(X: pd.DataFrame, n=6):
     all_new_features['moneyness'] = moneyness
 
     X = X.assign(**all_new_features)
+
+    # Drop raw open_t* columns and keep open_change_t* instead
+    open_cols_to_drop = [f'open_t{-i}' for i in range(0, 16)]
+    X = X.drop(columns=open_cols_to_drop, errors='ignore')
 
     return X
