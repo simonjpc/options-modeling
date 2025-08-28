@@ -1,10 +1,24 @@
+# env variables
 local.env
 
+# macOS system files
 .DS_Store
 */DS_Store
 
+# cache
 */__pycache__
 
+# data sources
 data
 
+# experiment outputs
 */experiments
+
+# data sources
+*.csv
+
+# env files
+*egg-info
+
+# old experiment notes to be updated
+*experiment_notes.md
