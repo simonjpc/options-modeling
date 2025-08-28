@@ -105,4 +105,4 @@ In folder [exp3](exp3/):
 
 ## License
 
-This project is licensed under the MIT License.
+This project is licensed under the Apache 2.0 License. See the [LICENSE](LICENSE) file for details.
