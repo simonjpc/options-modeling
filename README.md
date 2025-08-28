@@ -66,15 +66,15 @@ options-modeling/
    ```
 
 2. Set up a virtual environment:
-```bash
-python3 -m venv venv
-source venv/bin/activate
-```
+    ```bash
+    python3 -m venv venv
+    source venv/bin/activate
+    ```
 
 3. Install dependencies:
-```bash
-pip install -r requirements.txt
-```
+    ```bash
+    pip install -r requirements.txt
+    ```
 
 4. Set up environment variables:
 - Create a local.env file and add your API keys and other configurations.
@@ -89,9 +89,9 @@ In folder [exp1](exp1/):
 - experiments_moving_training_compound.py to obtain the return after a year when investing an amount from the previous month including the return (compounded return).
 - We used data from 2023 since it was the cheapest available.
 
-```bash
-python experiments_moving_training_compound.py
-```
+    ```bash
+    python experiments_moving_training_compound.py
+    ```
 
 In folder [exp2](exp2/):
 
