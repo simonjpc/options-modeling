@@ -22,3 +22,8 @@ data
 
 # old experiment notes to be updated
 *experiment_notes.md
+
+# images
+*.png
+*.jpeg
+*.jpg
