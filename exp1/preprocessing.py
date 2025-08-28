@@ -135,110 +135,6 @@ def tag_returns_process_group(strike, expire_date, group):
 
     return group_result
 
-
-# def create_option_dataset_full(df, n=16, label_column='label'):
-#     df = df.copy()
-#     df.index = pd.to_datetime(df.index)
-#     df = df.sort_index()
-
-#     expiration_times = pd.to_datetime(df['expire_date']) + pd.Timedelta(hours=16)
-#     df['time_to_expiry'] = (expiration_times - df.index).dt.total_seconds() / 3600
-
-#     time_series_cols = ['open', 'iv', 'bid', 'ask', 'delta', 'gamma', 'theta', 'vega', 'rho', 'delta_volume']
-#     static_cols = [
-#         'strike', 'expire_date', 'time_to_expiry', 'underlying_volume', 'dvol', 'baspread', 'rel_baspread', 
-#         'open_return', 'option_return', 'embedded_leverage', 'idiosyncratic_vol', 'm_degree', 'midpoint', 
-#         'optspread'
-#     ]
-#     label_cols = [label_column, 'percent_increase', 'hours_to_max']
-
-#     X_rows = []
-#     y_rows = []
-
-#     grouped = df.groupby(['strike', 'expire_date'], sort=False)
-
-#     for _, group in grouped:
-#         if len(group) < n:
-#             continue
-
-#         group = group.sort_index()
-
-#         ts = group[time_series_cols].values
-#         static = group[static_cols].values
-#         labels = group[label_cols].values
-#         datetimes = group.index.values
-
-#         T = len(group)
-#         num_windows = T - (n-1)
-
-#         idx = np.arange(n)[None, :] + np.arange(num_windows)[:, None]  # t0 to t-15
-#         ts_windows = ts[idx]  # (num_windows, 16, F)
-
-#         # Special treatment for 'open': all t0 to t-15
-#         open_windows = ts_windows[:, :, 0]  # open is feature 0, shape (num_windows, 16)
-
-#         # For others: keep t0 to t-5, t-10, t-15
-#         if n == 16:
-#             selected_idx = [0,1,2,3,4,5,10,15]
-#         elif n == 24:
-#             selected_idx = [0,1,2,3,4,5,10,15,20,23]
-#         other_features_windows = ts_windows[:, selected_idx, 1:]  # exclude 'open'
-
-#         open_flat = open_windows  # no reshape
-
-#         # Compute open_change_tN = (open_t-(N-1) - open_t-N) / open_t-N
-#         open_change = (open_flat[:, :-1] - open_flat[:, 1:]) / open_flat[:, 1:]
-#         # Rename columns: open_change_t0 corresponds to change from t0 to t-1
-#         open_change_flat = open_change  # shape (num_windows, 15)
-
-#         other_flat = other_features_windows.reshape(num_windows, -1)
-
-#         # ts_flat = np.concatenate([open_flat, other_flat], axis=1)
-#         ts_flat = np.concatenate([open_flat, open_change_flat, other_flat], axis=1)
-
-#         static_final = static[idx[:, 0]]
-#         labels_final = labels[idx[:, 0]]
-#         dates_final = datetimes[idx[:, 0]]
-
-#         X_group = np.column_stack([dates_final, static_final, ts_flat])
-#         y_group = labels_final
-
-#         X_rows.append(X_group)
-#         y_rows.append(y_group)
-
-#     X_final = np.vstack(X_rows)
-#     y_final = np.vstack(y_rows)
-
-#     # Build column names
-#     # open_col_names = [f'open_t{-i}' for i in range(0, 16)]  # open_t0 to open_t-15
-#     # feature_times = ['t0', 't-1', 't-2', 't-3', 't-4', 't-5', 't-10', 't-15']
-#     # other_col_names = [f'{col}_{t}' for t in feature_times for col in time_series_cols[1:]]
-#     open_col_names = [f'open_t{-i}' for i in range(0, n)]
-#     open_change_col_names = [f'open_change_t{-i}' for i in range(0, (n-1))]
-#     if n == 16:
-#         feature_times = ['t0', 't-1', 't-2', 't-3', 't-4', 't-5', 't-10', 't-15']
-#     elif n == 24:
-#         feature_times = ['t0', 't-1', 't-2', 't-3', 't-4', 't-5', 't-10', 't-15', 't-20', 't-23']
-#     other_col_names = [f'{col}_{t}' for t in feature_times for col in time_series_cols[1:]]
-
-#     # col_names = ['datetime', 'strike', 'expire_date', 'time_to_expiry'] + open_col_names + other_col_names
-#     col_names = [
-#         'datetime', 'strike', 'expire_date', 'time_to_expiry',
-#         'underlying_volume', 'dvol', 'baspread', 'rel_baspread', 
-#         'open_return', 'option_return', 'embedded_leverage',
-#         'idiosyncratic_vol', 'm_degree', 'midpoint', 'optspread'
-#     ] + open_col_names + open_change_col_names + other_col_names
-
-#     X = pd.DataFrame(X_final, columns=col_names)
-#     X['datetime'] = pd.to_datetime(X['datetime'])
-
-#     float_cols = [col for col in col_names if ("datetime" not in col) and ("expire_date" not in col)]
-#     X[float_cols] = X[float_cols].astype(np.float32)
-
-#     y = pd.DataFrame(y_final, columns=["target", "percent_increase", "hours_to_max"])
-
-#     return X, y
-
 def create_option_dataset_full_helper(group, window=16, label_column="label"):
     group = group.sort_index()
 
@@ -470,25 +366,6 @@ def add_advanced_features(X: pd.DataFrame, n=6):
     X = X.drop(columns=open_cols_to_drop, errors='ignore')
 
     return X
-
-# def preprocess_dataset(stock_data: pd.DataFrame, options_data: pd.DataFrame, n: int, month: str):
-#     Xpath = f"/Volumes/T7/backup/Documents/perso/repos_perso/options-modeling/data/lgbm-train/n{n}/X_{month}.csv"
-#     ypath = f"/Volumes/T7/backup/Documents/perso/repos_perso/options-modeling/data/lgbm-train/n{n}/y_{month}.csv"
-
-#     if os.path.exists(Xpath) and os.path.exists(ypath):
-#         print("data exists... loading source")
-#         X_month = pd.read_csv(Xpath)
-#         y_month = pd.read_csv(ypath)
-#     else:
-#         # 2. Preprocessing: same steps as you did for January
-#         df_labeled = prepare_labels(stock_data, options_data)
-#         print(f"labels created for month {month}")
-#         X_month, y_month = create_option_dataset_full(df_labeled, n=n)
-#         X_month = add_datetime_features(X_month)
-#         X_month = add_advanced_features(X_month, n=n)
-#         X_month.to_csv(Xpath, index=False)
-#         y_month.to_csv(ypath, index=False)
-#     return X_month, y_month
 
 def preprocess_dataset(stock_data: pd.DataFrame, options_data: pd.DataFrame, n: int, month: str, exp_round=2):
     Xpath = f"/Volumes/T7/backup/Documents/perso/repos_perso/options-modeling/data/lgbm-train/exp_round{exp_round}/n{n}/X_{month}.csv"

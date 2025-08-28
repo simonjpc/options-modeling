@@ -1,7 +1,6 @@
 import gc
 from datetime import datetime
 import pandas as pd
-from evaluation import evaluate_month_with_existing_models
 from preprocessing import (
     prepare_labels,
     create_option_dataset_full,
@@ -33,13 +32,10 @@ for month in all_months:
 
     # 2. Preprocessing: same steps as you did for January
     df_labeled = prepare_labels(stock_price_data, options_chain_data)
-    print(f"labels created for month {month}")
     X_month, y_month = create_option_dataset_full(df_labeled, n=16)
     X_month = add_datetime_features(X_month)
     X_month = add_advanced_features(X_month, n=16)
-    print(f"dataset completed for month {month}")
 
-    # print(f"💵 Final Capital for {month}: ${final_capital:.2f}")
     fold_metrics, fold_capitals, trades_df, _, _ = time_series_cv(
         X_month,
         y_month,
