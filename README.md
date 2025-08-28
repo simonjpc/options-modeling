@@ -38,7 +38,7 @@ Key objectives:
 ---
 
 ## Project Structure
-
+```plaintext
 options-modeling/
 ├── data/                # Contains raw and processed data files
 ├── exp1/                # Experiment group 1 (preprocessing, training, etc.)
@@ -54,7 +54,7 @@ options-modeling/
 ├── README.md            # Project documentation
 ├── setup.py             # Installation script
 └── local.env            # Environment variables (e.g., API keys)
-
+```
 ---
 
 ## Installation
