@@ -50,7 +50,8 @@ options-modeling/
 │   ├── data.py          # Data loading and handling
 │   ├── model.py         # Model definitions
 │   └── train_utils.py   # Training utilities
-├── notebooks/           # Jupyter notebooks for exploration and analysis
+├── exp3/                # Experiment group 3 (exploration)
+│   ├── notebooks/       # Jupyter notebooks for exploration and analysis
 ├── README.md            # Project documentation
 ├── setup.py             # Installation script
 └── local.env            # Environment variables (e.g., API keys)
