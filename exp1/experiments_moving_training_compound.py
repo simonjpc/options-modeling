@@ -15,7 +15,7 @@ from constants import (
     OPTIONS_CHAIN_ABS_PATH_MAP,
     STOCK_PRICE_ABS_PATH,
 )
-from training import time_series_cv, time_series_real_eval
+from training import time_series_real_eval
 from load_and_save import save_experiment_results
 
 results = {}
@@ -42,23 +42,8 @@ for month in all_months[11:]:
         n=16,
         month=month
     )
-    # continue
-    # df_labeled = prepare_labels(stock_price_data, options_chain_data)
-    # print(f"labels created for month {month}")
-    # X_month, y_month = create_option_dataset_full(df_labeled, n=16)
-    # X_month = add_datetime_features(X_month)
-    # X_month = add_advanced_features(X_month, n=16)
     print(f"dataset completed for month {month}")
 
-    # print(f"💵 Final Capital for {month}: ${final_capital:.2f}")
-    # fold_metrics, fold_capitals, trades_df, _, _ = time_series_cv(
-    #     X_month,
-    #     y_month,
-    #     n_splits=5,
-    #     threshold=0.8,
-    #     starting_capital=current_capital,
-    #     nb_contracts=2,
-    # )
     fold_metrics, fold_capitals, trades_df, _, (_, best_threshold, best_precision, y_pred_proba) = time_series_real_eval(
         X_month,
         y_month,
@@ -91,6 +76,5 @@ for month in all_months[11:]:
     save_experiment_results(results, EXPERIMENT_MOVING_COMPOUND_RESULTS_PATH.format(today=now))
     print("tmp results saved. \n")
 
-    # del df_labeled, X_month, y_month
     del X_month, y_month
     gc.collect()
